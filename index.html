@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TRIAL CALENDAR — Sistema de Agenda de Investigación</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700;800&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="style.css" rel="stylesheet">
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loading">
+  <div class="loading-logo">TRIAL<span>·</span>CAL</div>
+  <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+  <div style="font-family:var(--font-mono);font-size:10px;color:var(--txt-3);letter-spacing:0.1em">INICIALIZANDO BASE DE DATOS...</div>
+</div>
+
+<div id="app" style="display:none">
+  <!-- TOPBAR -->
+  <header id="topbar">
+    <div class="topbar-brand"><div class="topbar-brand-dot"></div>TRIAL CAL</div>
+    <nav class="topbar-nav">
+      <button id="nav-calendar" class="active" onclick="showView('calendar')">Calendario</button>
+      <button id="nav-subjects" onclick="showView('subjects')">Sujetos</button>
+      <button id="nav-checkin" onclick="showView('checkin')">Check-In</button>
+      <button id="nav-waitlist" onclick="showView('waitlist')">Lista de Espera</button>
+      <button id="nav-noshow" onclick="showView('noshow')">No-Shows</button>
+    </nav>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-actions">
+      <input type="search" class="search-input" id="global-search" placeholder="Buscar sujeto / visita..." oninput="handleSearch(this.value)">
+      <button class="btn btn-ghost btn-icon" title="Configuración notificaciones" onclick="openModal('modal-notif')">&#9432;</button>
+      <button class="btn btn-ghost btn-icon" title="Exportar" onclick="openExportMenu()">&#8615;</button>
+      <button class="btn btn-accent" onclick="openModal('modal-visit', null)">&#43; Nueva Visita</button>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <div id="main">
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Navegación</div>
+        <div class="mini-cal" id="mini-cal"></div>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Recursos</div>
+        <div class="resource-list" id="resource-list"></div>
+        <button class="btn btn-ghost" style="width:100%;margin-top:8px;font-size:10px" onclick="openModal('modal-resource',null)">&#43; Agregar Recurso</button>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Hoy</div>
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-box"><div class="stat-val accent" id="stat-total">0</div><div class="stat-lbl">Visitas</div></div>
+          <div class="stat-box"><div class="stat-val green" id="stat-conf">0</div><div class="stat-lbl">Confirm.</div></div>
+          <div class="stat-box"><div class="stat-val" id="stat-pend">0</div><div class="stat-lbl">Pendiente</div></div>
+          <div class="stat-box"><div class="stat-val red" id="stat-ns">0</div><div class="stat-lbl">No-Show</div></div>
+        </div>
+      </div>
+      <div class="sidebar-section" style="border-bottom:none">
+        <div class="sidebar-label">Próximas</div>
+        <div id="sidebar-upcoming" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+    </aside>
+
+    <!-- CALENDAR AREA -->
+    <div id="calendar-area" id="view-calendar">
+      <div class="cal-toolbar">
+        <div class="cal-nav">
+          <button onclick="calNav(-1)" title="Anterior">&#8249;</button>
+          <button class="cal-today-btn" onclick="calGoToday()">HOY</button>
+          <button onclick="calNav(1)" title="Siguiente">&#8250;</button>
+        </div>
+        <div class="cal-title" id="cal-title">—</div>
+        <div class="topbar-spacer"></div>
+        <div class="cal-view-btns">
+          <button id="vbtn-day" onclick="setCalView('day')">Día</button>
+          <button id="vbtn-week" onclick="setCalView('week')" class="active">Semana</button>
+          <button id="vbtn-month" onclick="setCalView('month')">Mes</button>
+        </div>
+      </div>
+      <div id="cal-view"></div>
+    </div>
+
+    <!-- SUBJECTS VIEW -->
+    <div id="view-subjects" style="flex:1;overflow:auto;padding:20px;display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-family:var(--font-head);font-weight:800;font-size:24px;letter-spacing:0.08em;text-transform:uppercase">Sujetos de Investigación</div>
+        <button class="btn btn-accent" onclick="openModal('modal-subject',null)">&#43; Nuevo Sujeto</button>
+      </div>
+      <div id="subjects-table-wrap"></div>
+    </div>
+
+    <!-- CHECK-IN VIEW -->
+    <div id="view-checkin" style="flex:1;overflow:auto;padding:20px;display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-family:var(--font-head);font-weight:800;font-size:24px;letter-spacing:0.08em;text-transform:uppercase">Check-In — <span id="checkin-date-label" style="color:var(--accent)"></span></div>
+      </div>
+      <div id="checkin-list-wrap"></div>
+    </div>
+
+    <!-- WAITLIST VIEW -->
+    <div id="view-waitlist" style="flex:1;overflow:auto;padding:20px;display:none">
+      <div style="font-family:var(--font-head);font-weight:800;font-size:24px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:16px">Lista de Espera</div>
+      <div id="waitlist-table-wrap"></div>
+    </div>
+
+    <!-- NO-SHOW VIEW -->
+    <div id="view-noshow" style="flex:1;overflow:auto;padding:20px;display:none">
+      <div style="font-family:var(--font-head);font-weight:800;font-size:24px;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:16px">Registro de No-Shows</div>
+      <div id="noshow-table-wrap"></div>
+    </div>
+
+    <!-- DETAIL PANEL -->
+    <aside id="detail-panel" class="hidden">
+      <div class="detail-header">
+        <span class="detail-title" id="detail-title">VISITA</span>
+        <button class="btn btn-ghost btn-icon" onclick="closeDetail()" title="Cerrar">&#10005;</button>
+      </div>
+      <div class="detail-body" id="detail-body">
+        <div class="empty-state">
+          <div class="empty-state-icon">&#9744;</div>
+          <div class="empty-state-text">Sin selección</div>
+        </div>
+      </div>
+      <div class="detail-actions" id="detail-actions"></div>
+    </aside>
+  </div>
+
+  <!-- FOOTER -->
+  <footer id="footer">
+    <div class="footer-item"><div class="footer-dot" style="background:var(--green)"></div>DB Conectada</div>
+    <div class="footer-item" id="footer-notif-status"><div class="footer-dot" style="background:var(--txt-3)"></div>Notificaciones: —</div>
+    <div class="footer-item" style="margin-left:auto;color:var(--txt-3)">TRIAL CALENDAR v1.0 — Solo cliente · IndexedDB · Sin servidor</div>
+  </footer>
+</div>
+
+<!-- ═══════════════════ MODALS ═══════════════════ -->
+
+<!-- MODAL VISIT -->
+<div class="modal-backdrop" id="modal-visit" onclick="backdropClose(event,'modal-visit')">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-visit-title">NUEVA VISITA</span>
+      <button class="modal-close" onclick="closeModal('modal-visit')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="visit-id-field">
+      <div class="form-section-title">Datos de la Visita</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Sujeto *</label>
+          <select class="form-select" id="visit-subject-id">
+            <option value="">— Seleccionar sujeto —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Recurso / Sala *</label>
+          <select class="form-select" id="visit-resource-id">
+            <option value="">— Seleccionar recurso —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fecha *</label>
+          <input type="date" class="form-input" id="visit-date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Hora Inicio *</label>
+          <input type="time" class="form-input" id="visit-time-start">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Duración (min) *</label>
+          <input type="number" class="form-input" id="visit-duration" value="60" min="15" max="480" step="15">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Estado</label>
+          <select class="form-select" id="visit-status">
+            <option value="pending">Pendiente</option>
+            <option value="confirmed">Confirmada</option>
+            <option value="waitlist">Lista de Espera</option>
+            <option value="cancelled">Cancelada</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Investigador Asignado</label>
+          <input type="text" class="form-input" id="visit-investigator" placeholder="Nombre investigador">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo de Visita</label>
+          <select class="form-select" id="visit-type">
+            <option value="screening">Screening</option>
+            <option value="baseline">Baseline</option>
+            <option value="followup">Follow-Up</option>
+            <option value="final">Final</option>
+            <option value="other">Otro</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label class="form-label">Notas de la Visita</label>
+          <textarea class="form-textarea" id="visit-notes" placeholder="Instrucciones, preparativos, observaciones..."></textarea>
+        </div>
+      </div>
+      <div class="form-section-title" style="margin-top:16px">Recordatorios</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="rem-48" checked style="accent-color:var(--accent)"> 48h antes
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="rem-24" checked style="accent-color:var(--accent)"> 24h antes
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="rem-3" checked style="accent-color:var(--accent)"> 3h antes
+        </label>
+      </div>
+      <div id="conflict-warning" style="display:none;margin-top:12px;padding:10px 12px;background:var(--red-dim);border:1px solid var(--red);color:var(--red);font-family:var(--font-mono);font-size:11px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-visit')">Cancelar</button>
+      <button class="btn btn-accent" onclick="saveVisit()">Guardar Visita</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SUBJECT -->
+<div class="modal-backdrop" id="modal-subject" onclick="backdropClose(event,'modal-subject')">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-subject-title">NUEVO SUJETO</span>
+      <button class="modal-close" onclick="closeModal('modal-subject')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="subject-id-field">
+      <div class="form-section-title">Identificación</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">ID Anónimo</label>
+          <div style="display:flex;gap:6px">
+            <input type="text" class="form-input" id="subject-anon-id" placeholder="Ej: SUJ-001" style="flex:1">
+            <button class="btn" onclick="genAnonId()" title="Generar ID">&#8635;</button>
+          </div>
+          <div class="form-hint">Dejar vacío para ID automático</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Estado</label>
+          <select class="form-select" id="subject-status">
+            <option value="active">Activo</option>
+            <option value="screening">En Screening</option>
+            <option value="enrolled">Enrolado</option>
+            <option value="completed">Completado</option>
+            <option value="withdrawn">Retirado</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nombre</label>
+          <input type="text" class="form-input" id="subject-name" placeholder="Nombre (opcional)">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Teléfono</label>
+          <input type="tel" class="form-input" id="subject-phone" placeholder="+56 9 XXXX XXXX">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-input" id="subject-email" placeholder="correo@ejemplo.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Grupo / Cohorte</label>
+          <input type="text" class="form-input" id="subject-group" placeholder="Ej: Grupo A">
+        </div>
+        <div class="form-group full">
+          <label class="form-label">Notas Clínicas</label>
+          <textarea class="form-textarea" id="subject-notes" placeholder="Observaciones, contraindicaciones, requerimientos especiales..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-subject')">Cancelar</button>
+      <button class="btn btn-accent" onclick="saveSubject()">Guardar Sujeto</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RESOURCE -->
+<div class="modal-backdrop" id="modal-resource" onclick="backdropClose(event,'modal-resource')">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-resource-title">NUEVO RECURSO</span>
+      <button class="modal-close" onclick="closeModal('modal-resource')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="resource-id-field">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Nombre del Recurso *</label>
+          <input type="text" class="form-input" id="resource-name" placeholder="Ej: Sala A, Investigador Dr. X">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo</label>
+          <select class="form-select" id="resource-type">
+            <option value="room">Sala</option>
+            <option value="investigator">Investigador</option>
+            <option value="equipment">Equipo</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Color</label>
+          <input type="color" class="form-input" id="resource-color" value="#F0A500" style="height:36px;padding:2px 4px;cursor:pointer">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Capacidad</label>
+          <input type="number" class="form-input" id="resource-capacity" value="1" min="1">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-resource')">Cancelar</button>
+      <button class="btn btn-accent" onclick="saveResource()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NOTIFICATION SETTINGS -->
+<div class="modal-backdrop" id="modal-notif" onclick="backdropClose(event,'modal-notif')">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-header">
+      <span class="modal-title">CONFIGURACIÓN DE RECORDATORIOS</span>
+      <button class="modal-close" onclick="closeModal('modal-notif')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab(this,'tab-notif-canales')">Canales</button>
+        <button class="tab-btn" onclick="switchTab(this,'tab-notif-templates')">Plantillas</button>
+        <button class="tab-btn" onclick="switchTab(this,'tab-notif-limits')">Limitaciones</button>
+      </div>
+      <div class="tab-content active" id="tab-notif-canales">
+        <div class="notif-setting-row">
+          <div class="notif-setting-info">
+            <div class="notif-setting-name">Notificaciones del Navegador</div>
+            <div class="notif-setting-desc">Requiere permiso. Solo funciona con la app abierta.</div>
+          </div>
+          <div id="toggle-browser" class="toggle" onclick="toggleSetting('browser_notif')"></div>
+        </div>
+        <div class="notif-setting-row">
+          <div class="notif-setting-info">
+            <div class="notif-setting-name">Recordatorio por setTimeout</div>
+            <div class="notif-setting-desc">Alarma en memoria mientras la pestaña está activa.</div>
+          </div>
+          <div id="toggle-timeout" class="toggle on" onclick="toggleSetting('timeout_notif')"></div>
+        </div>
+        <div class="notif-setting-row">
+          <div class="notif-setting-info">
+            <div class="notif-setting-name">Email via EmailJS (gratuito)</div>
+            <div class="notif-setting-desc">Requiere cuenta EmailJS y Service/Template ID.</div>
+          </div>
+          <div id="toggle-emailjs" class="toggle" onclick="toggleSetting('emailjs_notif')"></div>
+        </div>
+        <div id="emailjs-config" style="display:none;margin-top:12px">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Service ID</label>
+              <input type="text" class="form-input" id="emailjs-service" placeholder="service_XXXXXXX">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Template ID</label>
+              <input type="text" class="form-input" id="emailjs-template" placeholder="template_XXXXXXX">
+            </div>
+            <div class="form-group full">
+              <label class="form-label">Public Key</label>
+              <input type="text" class="form-input" id="emailjs-pubkey" placeholder="Tu public key de EmailJS">
+            </div>
+          </div>
+          <div style="margin-top:8px;padding:10px;background:var(--bg-3);border:1px solid var(--border)">
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--txt-3);line-height:1.8">
+              1) Registrarse en emailjs.com (plan gratuito: 200 emails/mes)<br>
+              2) Crear un Service (Gmail, Outlook, etc.)<br>
+              3) Crear un Template con variables: {{subject_id}}, {{visit_time}}, {{place}}, {{duration}}, {{contact}}<br>
+              4) Pegar Service ID, Template ID y Public Key arriba.
+            </div>
+          </div>
+          <button class="btn" style="margin-top:8px" onclick="saveEmailJSConfig()">Guardar Config EmailJS</button>
+        </div>
+        <div class="notif-setting-row" style="margin-top:8px">
+          <div class="notif-setting-info">
+            <div class="notif-setting-name">Export .ICS automático al crear visita</div>
+            <div class="notif-setting-desc">Genera archivo .ics para importar a Google Cal / Apple Cal.</div>
+          </div>
+          <div id="toggle-ics" class="toggle on" onclick="toggleSetting('ics_export')"></div>
+        </div>
+        <div style="margin-top:14px">
+          <button class="btn" onclick="requestNotifPermission()" style="width:100%">Solicitar Permiso de Notificaciones del Navegador</button>
+        </div>
+        <div id="notif-permission-status" style="margin-top:8px;font-family:var(--font-mono);font-size:10px;color:var(--txt-3)"></div>
+      </div>
+      <div class="tab-content" id="tab-notif-templates">
+        <div style="margin-bottom:16px">
+          <div style="font-family:var(--font-head);font-weight:700;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);margin-bottom:8px">Plantilla 48 horas antes</div>
+          <div class="template-box" id="tpl-48h"></div>
+        </div>
+        <div style="margin-bottom:16px">
+          <div style="font-family:var(--font-head);font-weight:700;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--yellow);margin-bottom:8px">Plantilla 24 horas antes</div>
+          <div class="template-box" id="tpl-24h"></div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-head);font-weight:700;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--red);margin-bottom:8px">Plantilla 3 horas antes</div>
+          <div class="template-box" id="tpl-3h"></div>
+        </div>
+      </div>
+      <div class="tab-content" id="tab-notif-limits">
+        <div style="background:var(--bg-3);border:1px solid var(--border);padding:14px;font-family:var(--font-mono);font-size:11px;line-height:2;color:var(--txt-2)">
+          <div style="color:var(--red);font-weight:600;margin-bottom:8px">⚠ LIMITACIONES IMPORTANTES (sin servidor)</div>
+          <div>• Los recordatorios por setTimeout/Notifications API SOLO funcionan mientras la pestaña del navegador esté abierta y activa.</div>
+          <div>• Si el usuario cierra el navegador o la pestaña, los timers se pierden y no hay forma de recuperarlos automáticamente.</div>
+          <div>• Al reabrir la app, se reprograman los recordatorios pendientes automáticamente si la visita aún no ocurrió.</div>
+          <div>• Web Push completo (notificaciones en background) requiere un Service Worker con servidor de push (VAPID keys). Esto está fuera del alcance de esta app cliente.</div>
+          <div>• El envío de email (EmailJS) requiere que la pestaña esté abierta en el momento del recordatorio.</div>
+          <div style="color:var(--green);margin-top:8px">✓ ALTERNATIVAS ROBUSTAS</div>
+          <div>• Exportar .ICS al crear cada visita y agregarlo a Google Calendar / Apple Calendar / Outlook (notificaciones nativas del SO).</div>
+          <div>• Usar EmailJS para recordatorios mientras la app esté abierta (200 emails/mes gratis).</div>
+          <div>• Pedirle al sujeto que confirme recepción del ICS.</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-accent" onclick="closeModal('modal-notif')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT MENU (floating) -->
+<div id="export-menu" style="display:none;position:fixed;z-index:150;background:var(--bg-2);border:1px solid var(--border-hi);min-width:200px">
+  <div style="padding:6px 0">
+    <button class="btn btn-ghost" style="width:100%;text-align:left;padding:8px 14px;font-size:12px" onclick="exportCSV()">&#9660; Exportar CSV (Visitas)</button>
+    <button class="btn btn-ghost" style="width:100%;text-align:left;padding:8px 14px;font-size:12px" onclick="exportSubjectsCSV()">&#9660; Exportar CSV (Sujetos)</button>
+    <button class="btn btn-ghost" style="width:100%;text-align:left;padding:8px 14px;font-size:12px" onclick="exportAllICS()">&#9660; Exportar ICS (Todas)</button>
+    <div style="border-top:1px solid var(--border);margin:4px 0"></div>
+    <button class="btn btn-ghost" style="width:100%;text-align:left;padding:8px 14px;font-size:12px" onclick="triggerImportCSV()">&#9650; Importar CSV</button>
+    <input type="file" id="import-csv-input" accept=".csv" style="display:none" onchange="importCSV(this)">
+  </div>
+</div>
+
+<!-- NOTIFICATION TOAST -->
+<div class="notif-pill" id="notif-pill">
+  <div class="notif-icon" id="notif-icon"></div>
+  <div>
+    <div class="notif-text" id="notif-text"></div>
+    <div class="notif-subtitle" id="notif-subtitle"></div>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+</body>
+</html>
